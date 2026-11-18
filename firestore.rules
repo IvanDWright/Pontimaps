@@ -1,0 +1,200 @@
+rules_version = '2';
+
+// PontiMaps — reglas de Cloud Firestore (plan Spark, SIN Cloud Functions).
+//
+// Aquí vive la autoridad de seguridad: la interfaz solo oculta o muestra
+// controles. Implementa docs/REQUIREMENTS.md §4.1–§4.4.
+//
+// ESTADO: escritas pero SIN PROBAR con el Firebase Emulator Suite. Antes de
+// desplegarlas, ejecuta los casos mínimos de docs/FIREBASE_SETUP.md.
+//
+// Despliegue:  firebase deploy --only firestore:rules
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // ------------------------------------------------------------------ utilidades
+    function signedIn() {
+      return request.auth != null;
+    }
+
+    // Correo del dominio institucional (sin exigir verificación: se usa al crear el perfil).
+    function correoInstitucional() {
+      return signedIn()
+        && request.auth.token.email != null
+        && request.auth.token.email.matches('.*@javeriana[.]edu[.]co');
+    }
+
+    // Cuenta institucional con el correo verificado por el enlace nativo de Firebase.
+    function institucional() {
+      return correoInstitucional() && request.auth.token.email_verified == true;
+    }
+
+    function perfilDe(uid) {
+      return get(/databases/$(database)/documents/users/$(uid)).data;
+    }
+
+    function perfil() {
+      return perfilDe(request.auth.uid);
+    }
+
+    // Verificada y NO bloqueada: solo ellas escriben.
+    function activo() {
+      return institucional()
+        && exists(/databases/$(database)/documents/users/$(request.auth.uid))
+        && perfil().estado == 'activo';
+    }
+
+    // `rol: 'admin'` solo se asigna a mano en la consola de Firebase.
+    function esAdmin() {
+      return activo() && perfil().rol == 'admin';
+    }
+
+    function dentroDe(t, referencia, margenMs) {
+      return t.toMillis() >= referencia.toMillis() - margenMs
+        && t.toMillis() <= referencia.toMillis() + margenMs;
+    }
+
+    function minimo(a, b) {
+      return a < b ? a : b;
+    }
+
+    // ------------------------------------------------------------------ configuración
+    match /config/{doc} {
+      allow read: if true;
+      allow write: if false;            // solo la consola
+    }
+
+    // ------------------------------------------------------------------ reportes (público, sin autor)
+    match /reports/{id} {
+      allow read: if true;              // incluye visitantes sin sesión
+
+      // Crear: cuenta verificada y activa; expiraEn = creadoEn + 60 min exactos;
+      // contadores en cero; intervalo mínimo de 60 s entre reportes; y en el mismo
+      // batch se crea reportAuthors/{id} con el authorHash de quien reporta.
+      allow create: if activo()
+        && request.resource.data.keys().hasOnly(
+             ['tipo', 'idAristaAfectada', 'idLugar', 'lat', 'lng',
+              'creadoEn', 'expiraEn', 'confirmaciones', 'reportesNegativos'])
+        && request.resource.data.keys().hasAll(
+             ['tipo', 'lat', 'lng', 'creadoEn', 'expiraEn', 'confirmaciones', 'reportesNegativos'])
+        && request.resource.data.tipo in ['cierre', 'fila', 'altaAfluencia']
+        && request.resource.data.lat is number
+        && request.resource.data.lng is number
+        && request.resource.data.confirmaciones == 0
+        && request.resource.data.reportesNegativos == 0
+        && request.resource.data.creadoEn is timestamp
+        && request.resource.data.expiraEn is timestamp
+        && dentroDe(request.resource.data.creadoEn, request.time, 60000)
+        && request.resource.data.expiraEn.toMillis() - request.resource.data.creadoEn.toMillis() == 3600000
+        && (!('ultimoReporteEn' in perfil())
+            || request.time.toMillis() - perfil().ultimoReporteEn.toMillis() >= 60000)
+        && getAfter(/databases/$(database)/documents/reportAuthors/$(id)).data.authorHash
+             == perfil().authorHash;
+
+      // Actualizar: solo contadores y expiraEn, y siempre junto con el primer voto de
+      // esa cuenta (reports/{id}/votes/{authorHash}). El autor no vota el suyo.
+      allow update: if activo()
+        && request.resource.data.diff(resource.data).affectedKeys()
+             .hasOnly(['confirmaciones', 'reportesNegativos', 'expiraEn'])
+        && resource.data.expiraEn.toMillis() > request.time.toMillis()
+        && resource.data.reportesNegativos < 3
+        && !exists(/databases/$(database)/documents/reports/$(id)/votes/$(perfil().authorHash))
+        && existsAfter(/databases/$(database)/documents/reports/$(id)/votes/$(perfil().authorHash))
+        && get(/databases/$(database)/documents/reportAuthors/$(id)).data.authorHash
+             != perfil().authorHash
+        && (
+          // «Sigue ahí»: +1 confirmación y expiraEn = min(creadoEn + 180 min, expiraEn + 30 min)
+          (getAfter(/databases/$(database)/documents/reports/$(id)/votes/$(perfil().authorHash)).data.valor == 1
+            && request.resource.data.confirmaciones == resource.data.confirmaciones + 1
+            && request.resource.data.reportesNegativos == resource.data.reportesNegativos
+            && request.resource.data.expiraEn.toMillis()
+                 == minimo(resource.data.creadoEn.toMillis() + 10800000,
+                           resource.data.expiraEn.toMillis() + 1800000))
+          ||
+          // «Falso / Ya no está»: +1 voto negativo; con 3 el reporte se oculta en el cliente
+          (getAfter(/databases/$(database)/documents/reports/$(id)/votes/$(perfil().authorHash)).data.valor == -1
+            && request.resource.data.reportesNegativos == resource.data.reportesNegativos + 1
+            && request.resource.data.confirmaciones == resource.data.confirmaciones
+            && request.resource.data.expiraEn == resource.data.expiraEn)
+        );
+
+      // Borrar: el administrador al instante; o cualquier cuenta verificada si ya venció.
+      allow delete: if esAdmin()
+        || (institucional() && resource.data.expiraEn.toMillis() < request.time.toMillis());
+
+      // Un voto por cuenta: el id del documento es el authorHash del votante.
+      match /votes/{votante} {
+        allow read: if esAdmin() || (activo() && votante == perfil().authorHash);
+        allow create: if activo()
+          && votante == perfil().authorHash
+          && request.resource.data.keys().hasOnly(['valor', 'en'])
+          && request.resource.data.valor in [1, -1]
+          && request.resource.data.en is timestamp;
+        allow update, delete: if false;
+      }
+    }
+
+    // ------------------------------------------------------------------ autoría (privada)
+    match /reportAuthors/{id} {
+      allow read: if esAdmin() || (activo() && resource.data.authorHash == perfil().authorHash);
+      allow create: if activo()
+        && request.resource.data.keys().hasOnly(['authorHash', 'borrarEn'])
+        && request.resource.data.authorHash == perfil().authorHash
+        && existsAfter(/databases/$(database)/documents/reports/$(id));
+      allow update: if false;
+      allow delete: if esAdmin() || (activo() && resource.data.authorHash == perfil().authorHash);
+    }
+
+    // ------------------------------------------------------------------ alertas oficiales
+    match /officialAlerts/{id} {
+      allow read: if true;
+      allow create: if esAdmin()
+        && request.resource.data.keys().hasOnly(['tipo', 'mensaje', 'lat', 'lng', 'desde', 'hasta'])
+        && request.resource.data.tipo == 'oficial'
+        && request.resource.data.mensaje is string
+        && request.resource.data.mensaje.size() > 0
+        && request.resource.data.mensaje.size() <= 140;
+      allow update, delete: if esAdmin();
+    }
+
+    // ------------------------------------------------------------------ perfiles
+    match /users/{uid} {
+      allow read: if signedIn() && (request.auth.uid == uid || esAdmin());
+
+      // Crear su propio perfil: nunca como administrador y siempre activo. Se permite
+      // sin correo verificado porque el perfil se crea al registrarse.
+      allow create: if correoInstitucional()
+        && request.auth.uid == uid
+        && request.resource.data.keys().hasOnly(['rol', 'estado', 'authorHash', 'createdAt', 'consent'])
+        && request.resource.data.rol in ['estudiante', 'profesor', 'administrativo']
+        && request.resource.data.estado == 'activo'
+        && request.resource.data.authorHash is string
+        && request.resource.data.authorHash.size() == 64;
+
+      // El dueño no toca rol, estado ni authorHash; solo el administrador cambia
+      // `estado`, y nunca el de otro administrador ni el propio.
+      allow update: if (activo()
+                        && request.auth.uid == uid
+                        && request.resource.data.diff(resource.data).affectedKeys()
+                             .hasOnly(['prefs', 'consent', 'ultimoReporteEn']))
+                    || (esAdmin()
+                        && resource.data.rol != 'admin'
+                        && request.auth.uid != uid
+                        && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['estado']));
+
+      allow delete: if signedIn() && request.auth.uid == uid;
+    }
+
+    // ------------------------------------------------------------------ bitácora del administrador
+    match /adminActions/{id} {
+      allow read: if esAdmin();
+      allow create: if esAdmin() && request.resource.data.quien == request.auth.uid;
+      allow update, delete: if false;
+    }
+
+    // Todo lo demás, denegado.
+    match /{otro=**} {
+      allow read, write: if false;
+    }
+  }
+}

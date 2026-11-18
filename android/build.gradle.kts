@@ -1,3 +1,17 @@
+// Classpath del plugin de servicios de Google solo si hay `google-services.json`
+// (Firebase configurado). Sin el archivo no se resuelve nada extra.
+buildscript {
+    repositories {
+        google()
+        mavenCentral()
+    }
+    dependencies {
+        if (file("app/google-services.json").exists()) {
+            classpath("com.google.gms:google-services:4.4.4")
+        }
+    }
+}
+
 allprojects {
     repositories {
         google()

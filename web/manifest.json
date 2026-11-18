@@ -1,11 +1,11 @@
 {
-    "name": "pontimaps_app",
-    "short_name": "pontimaps_app",
+    "name": "PontiMaps",
+    "short_name": "PontiMaps",
     "start_url": ".",
     "display": "standalone",
-    "background_color": "#0175C2",
-    "theme_color": "#0175C2",
-    "description": "A new Flutter project.",
+    "background_color": "#F8F9FA",
+    "theme_color": "#002D72",
+    "description": "PontiMaps — El Waze del Campus Javeriano. Navegación peatonal interna y reportes colaborativos.",
     "orientation": "portrait-primary",
     "prefer_related_applications": false,
     "icons": [

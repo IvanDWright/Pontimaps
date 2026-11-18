@@ -1,6 +1,12 @@
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
+    <!-- Ubicación (solo en primer plano, tras PermissionScreen) y red para los tiles de OSM. -->
+    <uses-permission android:name="android.permission.ACCESS_FINE_LOCATION"/>
+    <uses-permission android:name="android.permission.ACCESS_COARSE_LOCATION"/>
+    <uses-permission android:name="android.permission.INTERNET"/>
+    <!-- Avisos de hora de salida (Android 13+); sin este permiso la alerta se muestra dentro de la app. -->
+    <uses-permission android:name="android.permission.POST_NOTIFICATIONS"/>
     <application
-        android:label="pontimaps_app"
+        android:label="PontiMaps"
         android:name="${applicationName}"
         android:icon="@mipmap/ic_launcher">
         <activity

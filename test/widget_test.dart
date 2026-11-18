@@ -1,30 +1,71 @@
-// This is a basic Flutter widget test.
-//
-// To perform an interaction with a widget in your test, use the WidgetTester
-// utility in the flutter_test package. For example, you can send tap and scroll
-// gestures. You can also use WidgetTester to find child widgets in the widget
-// tree, read text, and verify that the values of widget properties are correct.
-
 import 'package:flutter_test/flutter_test.dart';
 import 'package:material_ui/material_ui.dart';
-
-import 'package:pontimaps_app/main.dart';
+import 'package:pontimaps_app/app.dart';
+import 'package:pontimaps_app/core/config/app_config.dart';
+import 'package:pontimaps_app/core/constants/layout_metrics.dart';
+import 'package:pontimaps_app/core/routing/app_router.dart';
+import 'package:pontimaps_app/core/theme/pontimaps_theme.dart';
+import 'package:pontimaps_app/data/campus_cartography.dart';
 
 void main() {
-  testWidgets('Counter increments smoke test', (WidgetTester tester) async {
-    // Build our app and trigger a frame.
-    await tester.pumpWidget(const MyApp());
+  late CampusCartography cartografia;
 
-    // Verify that our counter starts at 0.
-    expect(find.text('0'), findsOneWidget);
-    expect(find.text('1'), findsNothing);
+  setUp(() => cartografia = CampusCartography.seed());
 
-    // Tap the '+' icon and trigger a frame.
-    await tester.tap(find.byIcon(Icons.add));
-    await tester.pump();
+  testWidgets('muestra la confirmación de la base cartográfica cargada', (tester) async {
+    await tester.pumpWidget(
+      PontiMapsApp(cartography: cartografia, initialLocation: Rutas.estado),
+    );
+    await tester.pumpAndSettle();
 
-    // Verify that our counter has incremented.
-    expect(find.text('0'), findsNothing);
-    expect(find.text('1'), findsOneWidget);
+    expect(find.text('Base cartográfica cargada'), findsOneWidget);
+    expect(find.text('La Pontimaps'), findsOneWidget);
+    expect(find.text('Conexo'), findsOneWidget);
+    expect(find.text('${cartografia.edificios.length}'), findsWidgets);
+    expect(find.textContaining('Modo demostración sin conexión'), findsOneWidget);
+    expect(find.textContaining('OpenStreetMap'), findsOneWidget);
+    expect(find.textContaining('aproximadas'), findsNothing);
+  });
+
+  testWidgets('la app se llama PontiMaps y usa PontiMapsTheme', (tester) async {
+    await tester.pumpWidget(PontiMapsApp(cartography: cartografia));
+
+    final app = tester.widget<MaterialApp>(find.byType(MaterialApp));
+    expect(app.title, 'PontiMaps');
+    expect(app.theme?.colorScheme.primary, PontiMapsTheme.primary);
+    expect(app.theme?.scaffoldBackgroundColor, PontiMapsTheme.background);
+  });
+
+  testWidgets('en modo en línea muestra el proyecto de Firebase', (tester) async {
+    await tester.pumpWidget(
+      PontiMapsApp(
+        cartography: cartografia,
+        config: const AppConfig(useOfflineFallback: false),
+        initialLocation: Rutas.estado,
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    expect(find.textContaining('pontimaps-puj'), findsOneWidget);
+    expect(find.textContaining('Modo demostración'), findsNothing);
+  });
+
+  testWidgets('cabe en 360 × 800 dp con texto al 200 % sin desbordes', (tester) async {
+    tester.view.physicalSize = const Size(LayoutMetrics.baseWidth, LayoutMetrics.baseHeight);
+    tester.view.devicePixelRatio = 1;
+    tester.platformDispatcher.textScaleFactorTestValue = LayoutMetrics.maxTextScale;
+    addTearDown(() {
+      tester.view.resetPhysicalSize();
+      tester.view.resetDevicePixelRatio();
+      tester.platformDispatcher.clearTextScaleFactorTestValue();
+    });
+
+    await tester.pumpWidget(
+      PontiMapsApp(cartography: cartografia, initialLocation: Rutas.estado),
+    );
+    await tester.pumpAndSettle();
+
+    expect(tester.takeException(), isNull);
+    expect(find.text('Base cartográfica cargada'), findsOneWidget);
   });
 }

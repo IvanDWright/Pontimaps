@@ -4,8 +4,25 @@ plugins {
     id("dev.flutter.flutter-gradle-plugin")
 }
 
+// Firebase (Auth + Firestore): el plugin de servicios de Google solo se aplica si
+// existe `android/app/google-services.json`. Sin ese archivo la app compila y corre
+// igual en modo sin conexión (USE_OFFLINE_FALLBACK=true). El classpath se declara,
+// también de forma condicional, en `android/build.gradle.kts`.
+if (file("google-services.json").exists()) {
+    apply(plugin = "com.google.gms.google-services")
+}
+
+// Firma de release: si existe `android/key.properties` (fuera de Git) se firma con
+// ese almacén; si no, se usa la clave de depuración para que `flutter build apk
+// --release` produzca un APK instalable para compartir y probar.
+val keystoreProperties = java.util.Properties()
+val keystorePropertiesFile = rootProject.file("key.properties")
+if (keystorePropertiesFile.exists()) {
+    keystorePropertiesFile.inputStream().use { keystoreProperties.load(it) }
+}
+
 android {
-    namespace = "com.example.pontimaps_app"
+    namespace = "co.edu.javeriana.pontimaps_app"
     compileSdk = flutter.compileSdkVersion
     ndkVersion = flutter.ndkVersion
 
@@ -15,11 +32,10 @@ android {
     }
 
     defaultConfig {
-        // TODO: Specify your own unique Application ID (https://developer.android.com/studio/build/application-id.html).
-        applicationId = "com.example.pontimaps_app"
-        // You can update the following values to match your application needs.
-        // For more information, see: https://flutter.dev/to/review-gradle-config.
-        minSdk = flutter.minSdkVersion
+        applicationId = "co.edu.javeriana.pontimaps_app"
+        // Android 10 (API 29) o superior. Firebase exige al menos API 23.
+        // `compileSdk` y `targetSdk` siguen la versión de Flutter (API 35 o más).
+        minSdk = 29
         targetSdk = flutter.targetSdkVersion
         // Uses the version code from pubspec.yaml. When using split APKs, 1000 * ABI_VERSION
         // is added automatically by Flutter. (https://developer.android.com/studio/build/configure-apk-splits#configure-APK-versions)
@@ -29,11 +45,30 @@ android {
         versionName = flutter.versionName
     }
 
+    signingConfigs {
+        if (keystoreProperties.isNotEmpty()) {
+            create("release") {
+                keyAlias = keystoreProperties["keyAlias"] as String
+                keyPassword = keystoreProperties["keyPassword"] as String
+                storeFile = file(keystoreProperties["storeFile"] as String)
+                storePassword = keystoreProperties["storePassword"] as String
+            }
+        }
+    }
+
     buildTypes {
         release {
-            // TODO: Add your own signing config for the release build.
-            // Signing with the debug keys for now, so `flutter run --release` works.
-            signingConfig = signingConfigs.getByName("debug")
+            signingConfig = if (keystoreProperties.isNotEmpty()) {
+                signingConfigs.getByName("release")
+            } else {
+                // Clave de depuración: sirve para probar y compartir el APK, no para Play Store.
+                signingConfigs.getByName("debug")
+            }
+            // Reglas de R8 para `flutter_map` y Firebase (ver proguard-rules.pro).
+            proguardFiles(
+                getDefaultProguardFile("proguard-android-optimize.txt"),
+                "proguard-rules.pro",
+            )
         }
     }
 }

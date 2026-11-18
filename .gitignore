@@ -48,7 +48,7 @@ app.*.map.json
 .widget_preview/
 
 # ==========================================================
-# JaveRutas — Seguridad, Variables de Entorno y Credenciales
+# PontiMaps — Seguridad, Variables de Entorno y Credenciales
 # (Prohibido subir API Keys o secretos)
 # ==========================================================
 .env
@@ -69,3 +69,13 @@ ui-debug.log*
 *.jks
 *.keystore
 android/key.properties
+
+# Mockups (Node / Vite)
+mockups/node_modules/
+mockups/dist/
+
+# graphify (grafo de conocimiento generado)
+graphify-out/
+
+# Android / Firebase: nunca se versionan (Regla 6)
+android/app/google-services.json
