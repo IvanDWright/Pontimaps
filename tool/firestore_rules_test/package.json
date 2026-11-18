@@ -1,0 +1,13 @@
+{
+  "name": "pontimaps-firestore-rules-test",
+  "private": true,
+  "type": "module",
+  "description": "Pruebas de firestore.rules con el Firebase Emulator Suite (sin proyecto ni cuenta).",
+  "scripts": {
+    "test": "node --test --test-concurrency=1 ."
+  },
+  "devDependencies": {
+    "@firebase/rules-unit-testing": "^6.0.0",
+    "firebase": "^13.4.0"
+  }
+}

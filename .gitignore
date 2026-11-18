@@ -70,9 +70,10 @@ ui-debug.log*
 *.keystore
 android/key.properties
 
-# Mockups (Node / Vite)
-mockups/node_modules/
+# Mockups y herramientas (Node / Vite / Firestore Emulator tests)
+**/node_modules/
 mockups/dist/
+/android/build/
 
 # graphify (grafo de conocimiento generado)
 graphify-out/

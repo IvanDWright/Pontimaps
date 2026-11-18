@@ -1,3 +1,5 @@
+import java.util.Properties
+
 plugins {
     id("com.android.application")
     // The Flutter Gradle Plugin must be applied after the Android and Kotlin Gradle plugins.
@@ -15,7 +17,7 @@ if (file("google-services.json").exists()) {
 // Firma de release: si existe `android/key.properties` (fuera de Git) se firma con
 // ese almacén; si no, se usa la clave de depuración para que `flutter build apk
 // --release` produzca un APK instalable para compartir y probar.
-val keystoreProperties = java.util.Properties()
+val keystoreProperties = Properties()
 val keystorePropertiesFile = rootProject.file("key.properties")
 if (keystorePropertiesFile.exists()) {
     keystorePropertiesFile.inputStream().use { keystoreProperties.load(it) }
@@ -23,7 +25,9 @@ if (keystorePropertiesFile.exists()) {
 
 android {
     namespace = "co.edu.javeriana.pontimaps_app"
-    compileSdk = flutter.compileSdkVersion
+    // permission_handler_android exige compilar contra API 37; compileSdk no cambia
+    // el comportamiento en ejecución (eso lo define targetSdk).
+    compileSdk = maxOf(flutter.compileSdkVersion, 37)
     ndkVersion = flutter.ndkVersion
 
     compileOptions {

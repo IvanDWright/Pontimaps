@@ -254,8 +254,15 @@ abstract final class PontiMapsTheme {
       chipTheme: ChipThemeData(
         backgroundColor: surface,
         selectedColor: primary,
+        checkmarkColor: onPrimary,
         side: const BorderSide(color: border),
-        labelStyle: textTheme.bodySmall,
+        // Texto blanco sobre el azul al seleccionar (WCAG 1.4.3, >= 4.5:1).
+        // RawChip solo resuelve el *color* del estilo, por eso va un WidgetStateColor.
+        labelStyle: (textTheme.bodySmall ?? const TextStyle()).copyWith(
+          color: WidgetStateColor.resolveWith(
+            (states) => states.contains(WidgetState.selected) ? onPrimary : textSecondary,
+          ),
+        ),
         shape: const StadiumBorder(),
       ),
       bottomSheetTheme: const BottomSheetThemeData(

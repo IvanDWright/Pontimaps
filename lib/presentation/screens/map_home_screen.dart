@@ -761,6 +761,18 @@ class _PanelUbicacion extends StatelessWidget {
   Widget build(BuildContext context) {
     final textTheme = Theme.of(context).textTheme;
     final aviso = _aviso;
+    // Con texto grande (WCAG 1.4.4) la etiqueta de cuenta no cabe junto al
+    // interruptor sin partirse letra por letra: pasa a su propia línea.
+    final escalaGrande = MediaQuery.textScalerOf(context).scale(1) > 1.3;
+    final etiquetaCuenta = modoVisitante
+        ? Text(
+            suspendida ? 'Cuenta suspendida · solo lectura' : 'Modo visitante',
+            style: textTheme.bodySmall?.copyWith(
+              color: PontiMapsTheme.textSecondary,
+              fontWeight: FontWeight.w800,
+            ),
+          )
+        : null;
     return Material(
       color: PontiMapsTheme.surface,
       elevation: 4,
@@ -771,20 +783,16 @@ class _PanelUbicacion extends StatelessWidget {
           crossAxisAlignment: CrossAxisAlignment.stretch,
           mainAxisSize: MainAxisSize.min,
           children: <Widget>[
+            if (etiquetaCuenta != null && escalaGrande)
+              Padding(
+                padding: const EdgeInsets.only(top: LayoutMetrics.space8),
+                child: etiquetaCuenta,
+              ),
             ConstrainedBox(
               constraints: const BoxConstraints(minHeight: LayoutMetrics.minTouchTarget),
               child: Row(
                 children: <Widget>[
-                  if (modoVisitante)
-                    Flexible(
-                      child: Text(
-                        suspendida ? 'Cuenta suspendida · solo lectura' : 'Modo visitante',
-                        style: textTheme.bodySmall?.copyWith(
-                          color: PontiMapsTheme.textSecondary,
-                          fontWeight: FontWeight.w800,
-                        ),
-                      ),
-                    ),
+                  if (etiquetaCuenta != null && !escalaGrande) Flexible(child: etiquetaCuenta),
                   const Spacer(),
                   Flexible(
                     flex: 2,

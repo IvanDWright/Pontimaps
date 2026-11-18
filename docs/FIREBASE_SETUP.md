@@ -1,6 +1,6 @@
 # Configurar Firebase (plan gratuito Spark) para PontiMaps
 
-> **Estado de verificación.** El código de Firebase (`FirebaseAuthRepository`, `FirestoreReportsRepository`, `FirestoreAdminRepository`, `FirestoreOfficialAlertsRepository`) y `firestore.rules` están escritos y la lógica de los repositorios se prueba con `fake_cloud_firestore`, pero **nunca se han ejecutado contra un proyecto real** ni contra el emulador. Las reglas **no se han probado**: haz los casos de la sección 6 antes de desplegarlas.
+> **Estado de verificación.** El código de Firebase (`FirebaseAuthRepository`, `FirestoreReportsRepository`, `FirestoreAdminRepository`, `FirestoreOfficialAlertsRepository`) está escrito y la lógica de los repositorios se prueba con `fake_cloud_firestore`. **`firestore.rules` se probó con el Firebase Emulator Suite (27 pruebas, sección 6, 2026-11-18)** y pasan todas, pero el código Dart **nunca se ha ejecutado contra un proyecto real ni contra el emulador desde la app**: falta crear el proyecto (sección 1) y la prueba de extremo a extremo.
 
 Sin Cloud Functions: toda escritura es del cliente y **las reglas son la autoridad** (`docs/REQUIREMENTS.md` §4).
 
@@ -47,11 +47,21 @@ firebase deploy --only firestore:rules
 
 Con `rol: admin` y el correo verificado aparece **Más → Panel de moderación**: eliminar reportes, **Bloquear autor** (pone `estado = 'bloqueado'` a la cuenta con ese `authorHash`; la app de esa persona pasa a modo Visitante en solo lectura) y publicar alertas oficiales.
 
-## 6. Probar las reglas con el Emulator Suite (pendiente)
+## 6. Probar las reglas con el Emulator Suite
+
+No necesita cuenta ni proyecto (usa el ID de demostración `demo-pontimaps`). Requiere Node y Java 21+. Una sola vez, instala las dependencias de las pruebas:
 
 ```powershell
-firebase emulators:start --only firestore
+npm --prefix tool/firestore_rules_test install
 ```
+
+Después, desde la raíz del repo (arranca y apaga el emulador solo):
+
+```powershell
+firebase emulators:exec --only firestore --project demo-pontimaps "node --test --test-concurrency=1 tool/firestore_rules_test/firestore.rules.test.mjs"
+```
+
+Las pruebas están en `tool/firestore_rules_test/firestore.rules.test.mjs`: los 12 casos de abajo, los caminos felices (para asegurar que cada denegación es por su causa) y algunos de endurecimiento. **Ejecútalas cada vez que cambies `firestore.rules`.**
 
 Casos mínimos (todos deben comportarse como se indica):
 
